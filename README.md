@@ -1,9 +1,16 @@
 # OSLogger
+
 Simple tweak to display all the app NSLogs 
+
+# To show
+Long press with two fingers for 1 sec
+
+# To dismiss
+Long press on #OSLogger icon
+
 
 
 # Supports iOS 12,13 and 14+
-
 
 ### ScreenShots
 
