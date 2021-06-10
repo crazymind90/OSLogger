@@ -18,7 +18,7 @@ Long press on #OSLogger icon
 <img src="https://crazy90.com/Crazy/Files/IMG_4249.PNG" width="300"/> 
 
 
-<img src="https://crazy90.com/Crazy/Files/IMG_4250.PNG" width="300"/> 
+<img src="https://crazy90.com/Crazy/Files/IMG_CC1EF7F80363-1.jpeg" width="300"/> 
 
 
 
