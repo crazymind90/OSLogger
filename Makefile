@@ -16,3 +16,11 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 
 install::
 		install.exec
+
+
+install3::
+		install3.exec
+
+
+install2::
+		install2.exec

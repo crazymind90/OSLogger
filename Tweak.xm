@@ -32,11 +32,14 @@
 -(void) OSLoggerNotification:(NSNotification *)Notification;
 -(void) Clear;
 -(void) DisOSLogger;
+-(void) Scroll_TableView_Down;
+-(UITableView *_Nullable) InitTableViewWithObjects:(NSArray *_Nullable)Objects Frame:(CGRect)Frame BackgroundColor:(UIColor *_Nullable)BGColor SeparatorColor:(UIColor *_Nullable)SepColor InView:(UIView *_Nullable)InView delegate:(id _Nullable )delegate;
+-(void) CopyAlert;
 @end
 
 UILabel *NotificationsLabel;
 UIImageView *ImageView;
-UIViewController *ViewCont;
+UIView *ViewCont;
 UITextView *TextView;
 UIViewController *View_Controller;
 UIView *BasicView;
@@ -45,6 +48,8 @@ BOOL isBaseViewPresented = NO;
 BOOL isOSLoggerPresented = NO;
 UIButton *RecordButton;
 BOOL isRecording = YES;
+UITableView *TableView;
+NSMutableArray *MutArray;
  
 %hookf(void , NSLog, NSString *_Nullable format, ...) {
 
@@ -57,7 +62,7 @@ if (isOSLoggerPresented && format) {
 
     if (isRecording)
     [[NSNotificationCenter defaultCenter] postNotificationName:@"OSLoggerNotification" object:iLogArgs];
-
+ 
     va_end(ap);
   }
  
@@ -82,6 +87,61 @@ if (isOSLoggerPresented && format) {
 // }
 
 
+
+NSArray *reArrangeArrays(NSArray *iObjects) {
+    
+    NSMutableArray *Words = [[NSMutableArray alloc] init];
+    NSMutableArray *Colors = [[NSMutableArray alloc] init];
+    
+    CFIndex OneThree = 0;
+    CFIndex TwoFour = 1;
+    for (CFIndex iCounter = 0; iCounter < iObjects.count; iCounter ++) {
+        
+        [Words addObject:[iObjects objectAtIndex:OneThree]];
+        [Colors addObject:[iObjects objectAtIndex:TwoFour]];
+        
+        OneThree = OneThree + 2;
+        TwoFour = TwoFour + 2;
+        
+        if (OneThree > iObjects.count || TwoFour > iObjects.count)
+            break;
+    }
+    
+    return @[[NSArray arrayWithArray:Words],[NSArray arrayWithArray:Colors]];
+}
+
+NSMutableAttributedString *Colorizer(NSString *OriginalText,NSArray *WordsAndColors,UIColor *TheRestColor)  {
+    
+    NSArray *Text = [reArrangeArrays(WordsAndColors) objectAtIndex:0];
+    NSArray *Color = [reArrangeArrays(WordsAndColors) objectAtIndex:1];
+
+    NSMutableAttributedString *MutableAttString = [[NSMutableAttributedString alloc] initWithString:OriginalText attributes:@{NSForegroundColorAttributeName : TheRestColor}];
+
+    NSString *text = OriginalText;
+
+    if (OriginalText != nil) {
+
+    for (NSUInteger Counter = 0; Counter < Color.count; Counter ++) {
+
+    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:[NSString stringWithFormat:@"(%@)",[Text objectAtIndex:Counter]] options:kNilOptions error:nil];
+
+    NSRange range = NSMakeRange(0 ,text.length);
+
+    [regex enumerateMatchesInString:text options:kNilOptions range:range usingBlock:^(NSTextCheckingResult *result, NSMatchingFlags flags, BOOL *stop) {
+
+        NSRange subStringRange = [result rangeAtIndex:0];
+
+        [MutableAttString addAttribute:NSForegroundColorAttributeName value:[Color objectAtIndex:Counter] range:subStringRange];
+
+    }];
+
+
+    }
+}
+    return MutableAttString;
+}
+
+
 %hook UIWindow 
 %new 
 - (void) OSLoggerNotification:(NSNotification *)Notification {
@@ -94,58 +154,162 @@ if (isOSLoggerPresented && format) {
   NotificationsLabel.text = [NSString stringWithFormat:@"%li",(CFIndex)NotificationsLabel.text.integerValue + 1] ? : @"1";
   NotificationsLabel.hidden = NO;
   }
+ 
+  [MutArray addObject:[Notification object]];
+  [TableView reloadData];
 
-  TextHolder = [NSString stringWithFormat:@"%@\n%@",TextHolder ? : @"",[Notification object]];
-  TextView.text = [NSString stringWithFormat:@"%@\n%@",TextView.text ? : TextHolder,[Notification object]];
-
-  if (TextView.text.length > 0) {
-
-    NSRange bottom = NSMakeRange(TextView.text.length -1, 1);
-    [TextView scrollRangeToVisible:bottom];
-  }
+  [self Scroll_TableView_Down];
 
     });
   }
 }
 
+%new
+-(void) Scroll_TableView_Down {
+    
+    if (MutArray.count > 0)
+    [TableView scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:MutArray.count-1 inSection:0] atScrollPosition:UITableViewScrollPositionBottom animated:YES];
+
+}
+ 
+
 - (void)_resizeWindowToFullScreenIfNecessary {  
 
   %orig;
         
-    [CMManager InitLongPressGestureRecognizerInView:self PressDuration:1.0 NumberOfTouchesRequired:2 Target:self Actions:@selector(BeOSLogger)];
+  [CMManager InitLongPressGestureRecognizerInView:self PressDuration:1.0 NumberOfTouchesRequired:2 Target:self Actions:@selector(BeOSLogger)];
 
 }
+
+
+
+
+%new
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    
+ 
+    return MutArray.count;
+}
+
+%new
+-(void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    
+   NSIndexPath *Path = TableView.indexPathForSelectedRow;
+   NSString *SelectedRow = MutArray[Path.row];
+    
+    [self CopyAlert];
+    
+    [CMManager CopyToClipboard:(UITableViewCell *)[tableView cellForRowAtIndexPath:indexPath].textLabel.text];
+    
+    [self performSelector:@selector(Reloader) withObject:nil afterDelay:0.1f];
+
+ }
+
+%new
+-(void) Reloader {
+    
+    [TableView reloadData];
+}
+
+
+
+BOOL Colorize = NO;
+%new
+-(UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    
+    static NSString *CellID = @"Cell";
+
+    UITableViewCell *Cell;
+    
+    Cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:CellID];
+
+    tableView.backgroundColor = UIColor.clearColor;
+          
+    Cell.textLabel.text = MutArray[indexPath.row];
+
+    Cell.textLabel.textColor = UIColorFromHEX(0xFFFFFF);
+    
+    Cell.textLabel.numberOfLines = 0;
+    
+    if (Colorize) {
+    Cell.backgroundColor = UIColorFromHEX(0x070707);
+    Colorize = NO;
+    } else if (!Colorize) {
+    Cell.backgroundColor = UIColorFromHEX(0x212121);
+    Colorize = YES;
+    }
+
+
+    if ([Cell.textLabel.text containsString:@"OSLogger"])
+    Cell.textLabel.attributedText = Colorizer(Cell.textLabel.text,@[Cell.textLabel.text,UIColor.yellowColor], UIColor.whiteColor);
+    
+    
+    return Cell;
+}
+
+ 
+%new
+-(UITableView *_Nullable) InitTableViewWithObjects:(NSArray *_Nullable)Objects Frame:(CGRect)Frame BackgroundColor:(UIColor *_Nullable)BGColor SeparatorColor:(UIColor *_Nullable)SepColor InView:(UIView *_Nullable)InView delegate:(id _Nullable )delegate {
+     
+  TableView = [[UITableView alloc] initWithFrame:Frame style:UITableViewStyleGrouped];
+  
+
+  TableView.backgroundColor = BGColor;
+  TableView.separatorColor = SepColor;
+  TableView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
+  TableView.delegate = delegate;
+  TableView.dataSource = delegate;
+
+  [InView addSubview:TableView];
+
+ 
+    return TableView;
+    
+}
+
 
 %new
 -(void) BeOSLogger {
 
 if (!isOSLoggerPresented) { 
 
+    MutArray = [[NSMutableArray alloc] init];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(OSLoggerNotification:) name:@"OSLoggerNotification" object:nil];
 
-    ViewCont = [[UIViewController alloc] init];
-    ViewCont.view.frame = CGRectMake(10, 300, 77, 77);
-    ViewCont.view.backgroundColor = UIColor.clearColor;
-    [topMostController().view addSubview:ViewCont.view];
+    ViewCont = [CMManager InitViewWithBGColor:UIColor.clearColor Frame:CGRectNull BackgroundImage:nil InView:topMostController().view];
+        
+    ViewCont.clipsToBounds = YES;
+    ViewCont.alpha = 0.9f;
+    ViewCont.backgroundColor = UIColor.clearColor;
 
-    NSArray *Obj = [CMManager InitButtonImage:[UIImage imageNamed:@"/Library/Application Support/OSLogger.bundle/OSL.png"] InView:ViewCont.view Target:self Action:@selector(Button_Tapped)];
+    [ViewCont setTranslatesAutoresizingMaskIntoConstraints:NO];
+    [NSLayoutConstraint activateConstraints:@[
+
+    [ViewCont.topAnchor constraintEqualToAnchor:topMostController().view.topAnchor constant:215],
+    [ViewCont.leadingAnchor constraintEqualToAnchor:topMostController().view.leadingAnchor constant:5],
+    [ViewCont.trailingAnchor constraintEqualToAnchor:topMostController().view.leadingAnchor constant:75],
+    [ViewCont.bottomAnchor constraintEqualToAnchor:topMostController().view.topAnchor constant:285],
+
+    ]];
+
+    NSArray *Obj = [CMManager InitButtonImage:[UIImage imageNamed:@"/Library/Application Support/OSLogger.bundle/OSL.png"] InView:ViewCont Target:self Action:@selector(Button_Tapped)];
 
     ImageView = [Obj objectAtIndex:1];
     ImageView.clipsToBounds = YES;
-    ImageView.layer.cornerRadius = 31;
-    ImageView.alpha = 0.5f;
+    ImageView.layer.cornerRadius = 35;
+    ImageView.alpha = 0.7f;
 
     [ImageView setTranslatesAutoresizingMaskIntoConstraints:NO];
     [NSLayoutConstraint activateConstraints:@[
 
-    [ImageView.topAnchor constraintEqualToAnchor:ViewCont.view.topAnchor constant:7],
-    [ImageView.leadingAnchor constraintEqualToAnchor:ViewCont.view.leadingAnchor constant:7],
-    [ImageView.trailingAnchor constraintEqualToAnchor:ViewCont.view.trailingAnchor constant:-7],
-    [ImageView.bottomAnchor constraintEqualToAnchor:ViewCont.view.bottomAnchor constant:-7],
+    [ImageView.topAnchor constraintEqualToAnchor:ViewCont.topAnchor constant:0],
+    [ImageView.leadingAnchor constraintEqualToAnchor:ViewCont.leadingAnchor constant:0],
+    [ImageView.trailingAnchor constraintEqualToAnchor:ViewCont.trailingAnchor constant:0],
+    [ImageView.bottomAnchor constraintEqualToAnchor:ViewCont.bottomAnchor constant:0],
 
     ]];
 
-    NotificationsLabel = [CMManager InitLabelWithName:@"0" Frame:CGRectNull InView:ViewCont.view];
+    NotificationsLabel = [CMManager InitLabelWithName:@"0" Frame:CGRectNull InView:ViewCont];
     NotificationsLabel.hidden = YES;
     NotificationsLabel.clipsToBounds = YES;
     NotificationsLabel.layer.cornerRadius = 12;
@@ -161,16 +325,16 @@ if (!isOSLoggerPresented) {
     [NotificationsLabel setTranslatesAutoresizingMaskIntoConstraints:NO];
     [NSLayoutConstraint activateConstraints:@[
 
-    [NotificationsLabel.topAnchor constraintEqualToAnchor:ViewCont.view.topAnchor constant:0],
-    [NotificationsLabel.leadingAnchor constraintEqualToAnchor:ViewCont.view.leadingAnchor constant:0],
-    [NotificationsLabel.trailingAnchor constraintEqualToAnchor:ViewCont.view.leadingAnchor constant:25],
-    [NotificationsLabel.bottomAnchor constraintEqualToAnchor:ViewCont.view.topAnchor constant:25],
+    [NotificationsLabel.topAnchor constraintEqualToAnchor:ViewCont.topAnchor constant:0],
+    [NotificationsLabel.leadingAnchor constraintEqualToAnchor:ViewCont.leadingAnchor constant:0],
+    [NotificationsLabel.trailingAnchor constraintEqualToAnchor:ViewCont.leadingAnchor constant:25],
+    [NotificationsLabel.bottomAnchor constraintEqualToAnchor:ViewCont.topAnchor constant:25],
 
     ]];
 
     [CMManager InitLongPressGestureRecognizerInView:[Obj objectAtIndex:0] PressDuration:0.30 NumberOfTouchesRequired:1 Target:self Actions:@selector(DisOSLogger)];
 
-    [CMManager InitPanGestureRecognizerOnObject:ViewCont.view Target:self Action:@selector(Movable_View:)];
+    [CMManager InitPanGestureRecognizerOnObject:ViewCont Target:self Action:@selector(Movable_View:)];
 
     isOSLoggerPresented = YES;
     isRecording = YES;
@@ -185,8 +349,8 @@ if (!isOSLoggerPresented) {
 
   [self DismissBaseView];
 
-  [ViewCont.view setHidden:YES];
-  [ViewCont.view removeFromSuperview];
+  [ViewCont setHidden:YES];
+  [ViewCont removeFromSuperview];
 
   NotificationsLabel.text = @"";
   NotificationsLabel.hidden = YES;
@@ -231,10 +395,10 @@ ImageView.alpha = 0.5f;
     [BasicView setTranslatesAutoresizingMaskIntoConstraints:NO];
     [NSLayoutConstraint activateConstraints:@[
 
-    [BasicView.topAnchor constraintEqualToAnchor:topMostController().view.centerYAnchor constant:-180],
-    [BasicView.leadingAnchor constraintEqualToAnchor:topMostController().view.centerXAnchor constant:-150],
-    [BasicView.trailingAnchor constraintEqualToAnchor:topMostController().view.centerXAnchor constant:150],
-    [BasicView.bottomAnchor constraintEqualToAnchor:topMostController().view.centerYAnchor constant:180],
+    [BasicView.topAnchor constraintEqualToAnchor:topMostController().view.centerYAnchor constant:-230],
+    [BasicView.leadingAnchor constraintEqualToAnchor:topMostController().view.centerXAnchor constant:-160],
+    [BasicView.trailingAnchor constraintEqualToAnchor:topMostController().view.centerXAnchor constant:160],
+    [BasicView.bottomAnchor constraintEqualToAnchor:topMostController().view.centerYAnchor constant:230],
 
     ]];
 
@@ -285,27 +449,29 @@ ImageView.alpha = 0.5f;
     [RecordButton.bottomAnchor constraintEqualToAnchor:BasicView.topAnchor constant:50],
 
     ]];
-        
-    TextView = [CMManager InitTextViewWithFrame:CGRectNull BackgroundColor:UIColor.clearColor TextColor:UIColorFromHEX(0x959595) InView:BasicView];
 
-    TextView.text = TextHolder;
-    TextView.font = [UIFont systemFontOfSize:15];
-    [TextView setTranslatesAutoresizingMaskIntoConstraints:NO];
-    [NSLayoutConstraint activateConstraints:@[
+ 
+TableView = [self InitTableViewWithObjects:nil Frame:CGRectNull BackgroundColor:UIColor.clearColor SeparatorColor:UIColor.clearColor InView:BasicView delegate:self];
 
-    [TextView.topAnchor constraintEqualToAnchor:OSLoggerLabel.bottomAnchor constant:0],
-    [TextView.leadingAnchor constraintEqualToAnchor:BasicView.leadingAnchor constant:5],
-    [TextView.trailingAnchor constraintEqualToAnchor:BasicView.trailingAnchor constant:-5],
-    [TextView.bottomAnchor constraintEqualToAnchor:BasicView.bottomAnchor constant:-10],
+TableView.alpha = 0.7f;
+TableView.clipsToBounds = YES;
+TableView.layer.cornerRadius = 31;
+TableView.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+    
+[TableView setTranslatesAutoresizingMaskIntoConstraints:NO];
+[NSLayoutConstraint activateConstraints:@[
 
-    ]];
-        
-    if (TextView.text.length > 0) {
+[TableView.topAnchor constraintEqualToAnchor:OSLoggerLabel.bottomAnchor constant:0],
+[TableView.leadingAnchor constraintEqualToAnchor:BasicView.leadingAnchor constant:0],
+[TableView.trailingAnchor constraintEqualToAnchor:BasicView.trailingAnchor constant:0],
+[TableView.bottomAnchor constraintEqualToAnchor:BasicView.bottomAnchor constant:0],
 
-    NSRange bottom = NSMakeRange(TextView.text.length -1, 1);
-    [TextView scrollRangeToVisible:bottom];
-    }
+]];  
 
+[CMManager ActivateTheFollowingCodeAfter:0.10 handler:^{
+[self Scroll_TableView_Down];
+}];
+    
   UIButton *ClearButton = [CMManager InitButtonWithName:@"C" Frame:CGRectNull InView:BasicView Target:self Action:@selector(Clear)];
 
   ClearButton.layer.backgroundColor = UIColorFromHEX(0x656565).CGColor;
@@ -348,14 +514,14 @@ ImageView.alpha = 0.5f;
 %new
 -(void) Clear {
     
-    TextView.text = @"";
-    TextHolder = @"";
+    [MutArray removeAllObjects];
+    [TableView reloadData];
 }
 
 %new
 -(void) C {
         
-        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://twitter.com/CrazyMind90"] options:@{} completionHandler:nil];
+    [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://twitter.com/CrazyMind90"] options:@{} completionHandler:nil];
 }
 
 %new
@@ -368,8 +534,41 @@ ImageView.alpha = 0.5f;
         
 }
 
-%end
 
+%new
+-(void) CopyAlert {
+    
+    UILabel *CopyLabelView = [CMManager InitLabelWithName:@"Copied" Frame:CGRectNull InView:topMostController().view];
+    
+    CopyLabelView.textAlignment = NSTextAlignmentCenter;
+    CopyLabelView.textColor = UIColor.whiteColor;
+    CopyLabelView.font = [UIFont systemFontOfSize:20];
+    CopyLabelView.layer.backgroundColor = UIColorFromHEX(0x252525).CGColor;
+    CopyLabelView.clipsToBounds = YES;
+    CopyLabelView.layer.cornerRadius = 10;
+    
+    [CopyLabelView setTranslatesAutoresizingMaskIntoConstraints:NO];
+    
+    [NSLayoutConstraint activateConstraints:@[
+    
+        [CopyLabelView.topAnchor constraintEqualToAnchor:topMostController().view.topAnchor constant:50],
+        [CopyLabelView.leadingAnchor constraintEqualToAnchor:topMostController().view.centerXAnchor constant:-50],
+        [CopyLabelView.trailingAnchor constraintEqualToAnchor:topMostController().view.centerXAnchor constant:50],
+        [CopyLabelView.bottomAnchor constraintEqualToAnchor:topMostController().view.topAnchor constant:90],
+        
+    ]];
+    
+    [CMManager ViewToBeAnimated:CopyLabelView delegate:self Duration:0.35 StartAnimationFrom:kCATransitionFromBottom];
+    
+    [CMManager ActivateTheFollowingCodeAfter:2 handler:^{
+        
+        [CMManager AnimatedDismissView:CopyLabelView StartAnimationFrom:kCATransitionFromTop Duration:0.35 handler:^{
+            
+        }];
+    }];
+}
+
+%end
 
 
  
